@@ -1,5 +1,5 @@
 {
-  "name": "openconcept/phpLDAPpass",
+  "name": "openconcept/phpldappass",
   "description": "A website to allow users to self-change their ldap password.",
   "minimum-stability": "stable",
   "type": "project",
