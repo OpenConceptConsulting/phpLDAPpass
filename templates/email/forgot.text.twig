@@ -1,0 +1,12 @@
+Hello {{ user.name }},
+
+You, or someone claiming to be you, requested a password reset token for your account at {{ site.short }}.
+Your password reset token is
+{{ token }}
+and you can reset your password by copying and pasting the link below.
+
+{{ siteUrl(urlFor('reset', {token: enctoken})) }}
+
+If you didn't request this password reset token, you can ignore this message, but we recommend that you watch your accounts for any suspicious activity.
+
+The team @ {{ site.short }}.

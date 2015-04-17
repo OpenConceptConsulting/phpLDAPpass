@@ -9,44 +9,92 @@ class User
      * Corresponds to dn in LDAP.
      * @var string
      */
-    public $dn;
+    protected $dn;
 
     /**
      * Corresponds to cn in LDAP.
      * @var string
      */
-    public $displayName;
+    protected $displayName;
 
     /**
      * Corresponds to uid in LDAP.
      * @var string
      */
-    public $username;
+    protected $username;
 
     /**
-     * Corresponds to userPassword in LDAP.
+     * Corresponds to mail in LDAP.
      * @var string
      */
-    public $password;
+    protected $mail;
 
     /**
      * @var bool
      */
-    public $isAuthenticated = false;
+    protected $authenticated = false;
 
     /**
      * @param string $dn
      * @param string $username
      * @param string $displayName
-     * @param string $password
+     * @param string $mail
      * @param bool $isAuthenticated
      */
-    function __construct($dn = null, $username = null, $displayName = null, $password = null, $isAuthenticated = false)
+    function __construct($dn = null, $username = null, $displayName = null, $mail = null, $isAuthenticated = false)
     {
         $this->dn = $dn;
         $this->username = $username;
         $this->displayName = $displayName;
-        $this->password = $password;
-        $this->isAuthenticated = $isAuthenticated;
+        $this->mail = $mail;
+        $this->authenticated = $isAuthenticated;
+    }
+
+    /**
+     * @return string
+     */
+    public function getDn()
+    {
+        return $this->dn;
+    }
+
+    /**
+     * @return string
+     */
+    public function getDisplayName()
+    {
+        return $this->displayName;
+    }
+
+    /**
+     * @return string
+     */
+    public function getUsername()
+    {
+        return $this->username;
+    }
+
+    /**
+     * @return boolean
+     */
+    public function isAuthenticated()
+    {
+        return $this->authenticated;
+    }
+
+    /**
+     * @return string
+     */
+    public function getMail()
+    {
+        return $this->mail;
+    }
+
+    /**
+     * @param boolean $authenticated
+     */
+    public function setAuthenticated($authenticated)
+    {
+        $this->authenticated = $authenticated;
     }
 }

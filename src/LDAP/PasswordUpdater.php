@@ -5,34 +5,18 @@ namespace phpLDAPpass\LDAP;
 
 class PasswordUpdater
 {
-    /**
-     * @var array
-     */
-    protected $settings = array();
-
-    public function __construct(array $settings = array())
-    {
-        $this->settings = $settings + array(
-                'server' => 'localhost',
-                'port' => 389,
-                'version' => 3,
-                'base' => '',
-                'ssl' => false,
-            );
-    }
 
     /**
-     * @return resource
+     * @var Connection
      */
-    protected function connect()
-    {
-        $conn = ldap_connect($this->settings['server'], $this->settings['port']);
-        ldap_set_option($conn, LDAP_OPT_PROTOCOL_VERSION, $this->settings['version']);
-        if ('start_tls' === $this->settings['ssl']) {
-            ldap_start_tls($conn);
-        }
+    protected $connection;
 
-        return $conn;
+    /**
+     * @param Connection $connection
+     */
+    public function __construct(Connection $connection)
+    {
+        $this->connection = $connection;
     }
 
     /**
@@ -49,19 +33,24 @@ class PasswordUpdater
         return sprintf('{SSHA}%s', base64_encode(sha1($clear_text . $salt, true) . $salt));
     }
 
+    /**
+     * @param User $user
+     * @param string $current_pass
+     * @param string $new_password
+     * @return bool|string
+     */
     public function update(User $user, $current_pass, $new_password)
     {
-        $enc_new_pass = $this->encodePassword($new_password);
+        $conn = $this->connection->getConnection();
 
-        $conn = $this->connect();
-
-        if (false === @ldap_bind($conn, $user->dn, $current_pass)) {
+        if (true !== @ldap_bind($conn, $user->getDn(), $current_pass)) {
             return false;
         }
 
+        $enc_new_pass = $this->encodePassword($new_password);
         $entry['userPassword'] = $enc_new_pass;
 
-        if (@ldap_modify($conn, $user->dn, $entry)) {
+        if (@ldap_modify($conn, $user->getDn(), $entry)) {
             return $enc_new_pass;
         }
 

@@ -1,10 +1,17 @@
 <?php
 
 use phpLDAPpass\LDAP\Authenticator;
-use phpLDAPpass\LDAP\PasswordPolicy;
+use phpLDAPpass\LDAP\Connection;
+use phpLDAPpass\LDAP\PasswordTokenGenerator;
 use phpLDAPpass\LDAP\PasswordUpdater;
+use phpLDAPpass\LDAP\RootPasswordUpdater;
+use phpLDAPpass\LDAP\User;
+use phpLDAPpass\LDAP\UserFinder;
+use phpLDAPpass\PasswordPolicy;
+use phpLDAPpass\PasswordPolicyException;
+use phpLDAPpass\Slim\Middleware\CsrfMiddleware;
 use phpLDAPpass\Slim\Middleware\SessionMiddleware;
-use Slim\Extras\Middleware\CsrfGuard;
+use phpLDAPpass\TokenEmailer;
 use Slim\Slim;
 use Slim\Views\Twig;
 use Slim\Views\TwigExtension;
@@ -18,17 +25,22 @@ $config = require __DIR__ . '/../config.php';
 $app = new Slim(
     array(
         'view' => new Twig(),
-        'debug' => true,
+        'debug' => false,
     ) + $config['slim']
 );
 
-$app->add(new CsrfGuard());
+$app->configureMode(
+    'development',
+    function () use ($app) {
+        $app->config('debug', true);
+    }
+);
+
+$app->add(new CsrfMiddleware());
 $app->add(new SessionMiddleware());
 
 /** @var Twig $view */
 $view = $app->view();
-
-$view->set('site', $config['site']);
 
 $view->parserOptions = $config['twig']['environment'];
 
@@ -36,14 +48,16 @@ $view->parserExtensions = array(
     new TwigExtension(),
 );
 
+$view->getEnvironment()->addGlobal('site', $config['site']);
+
 // Routing
 
 $app->get(
     '/',
     function () use ($app) {
-        /** @var \phpLDAPpass\LDAP\User $user */
+        /** @var User $user */
         $user = $_SESSION['user'];
-        if (!$user->isAuthenticated) {
+        if (!$user->isAuthenticated()) {
             $app->redirectTo('login', array(), 307);
         }
 
@@ -52,11 +66,11 @@ $app->get(
 )->setName('root');
 
 $app->post(
-    '/changepass',
+    '/change',
     function () use ($app, $config) {
-        /** @var \phpLDAPpass\LDAP\User $user */
+        /** @var User $user */
         $user = $_SESSION['user'];
-        if (!$user->isAuthenticated) {
+        if (!$user->isAuthenticated()) {
             $app->flash('error', 'You must be signed in.');
             $app->redirectTo('login');
 
@@ -74,7 +88,7 @@ $app->post(
 
         $new_pass = $app->request()->post('new_password', '');
 
-        if ($app->request()->post('new_password_confirmation', '') !== $new_pass) {
+        if ($app->request()->post('new_password_confirmation', null) !== $new_pass) {
             $app->flashNow('error', "Your new password and the confirmation don't match.");
             $app->render('index.html.twig');
 
@@ -83,88 +97,20 @@ $app->post(
 
         $policy = new PasswordPolicy($config['password']);
 
-        switch ($policy->check($new_pass)) {
-            case PasswordPolicy::PASS:
-                // pass
-                break;
-            case PasswordPolicy::FAIL_MIN_LENGTH:
-                $app->flashNow(
-                    'error',
-                    sprintf(
-                        'Your password is too short. Please make it %d characters minimum.',
-                        $config['password']['min_length']
-                    )
-                );
-                $app->render('index.html.twig');
+        try {
+            $policy->check($new_pass);
+        } catch (PasswordPolicyException $e) {
+            $app->flashNow('error', $e->getMessage());
+            $app->render('index.html.twig');
 
-                return;
-            case PasswordPolicy::FAIL_ALPHA:
-                $app->flashNow(
-                    'error',
-                    sprintf(
-                    'Your password does not contain enough alpha characters. You need at least %d.',
-                        $config['password']['alpha']
-                    )
-                );
-                $app->render('index.html.twig');
-
-                return;
-            case PasswordPolicy::FAIL_LOWER:
-                $app->flashNow(
-                    'error',
-                    sprintf(
-                        'Your password does not contain enough lowercase alpha characters. You need at least %d.',
-                        $config['password']['lower']
-                    )
-                );
-                $app->render('index.html.twig');
-
-                return;
-            case PasswordPolicy::FAIL_UPPER:
-                $app->flashNow(
-                    'error',
-                    sprintf(
-                        'Your password does not contain enough alpha characters. You need at least %d.',
-                        $config['password']['upper']
-                    )
-                );
-                $app->render('index.html.twig');
-
-                return;
-            case PasswordPolicy::FAIL_DIGIT:
-                $app->flashNow(
-                    'error',
-                    sprintf(
-                        'Your password does not contain enough digit characters. You need at least %d.',
-                        $config['password']['digit']
-                    )
-                );
-                $app->render('index.html.twig');
-
-                return;
-            case PasswordPolicy::FAIL_SPECIAL:
-                $app->flashNow(
-                    'error',
-                    sprintf(
-                        'Your password does not contain enough special characters. You need at least %d.',
-                        $config['password']['special']
-                    )
-                );
-                $app->render('index.html.twig');
-
-                return;
-            default:
-                $app->flashNow('error', 'Your password failed to match the specified requirements.');
-                $app->render('index.html.twig');
-
-                return;
+            return;
         }
 
-        $updater = new PasswordUpdater($config['ldap']);
+        $conn = new Connection($config['ldap']);
+        $updater = new PasswordUpdater($conn);
 
-        if (false !== $pass = $updater->update($user, $current_pass, $new_pass)) {
+        if (false !== $updater->update($user, $current_pass, $new_pass)) {
             $app->flash('message', 'Your LDAP password was updated.');
-            $_SESSION['user']->password = $user->password = $pass;
             $app->redirectTo('root');
 
             return;
@@ -173,31 +119,164 @@ $app->post(
         $app->flashNow('error', 'There was a problem updating your password.');
         $app->render('index.html.twig');
     }
-)->setName('changepass');
+)->setName('process_change');
 
-$app->map(
-    '/login',
+$app->get(
+    '/forgot',
     function () use ($app, $config) {
-        if ($app->request()->isPost()) {
-            $username = $app->request()->post('username');
-            $password = $app->request()->post('password');
+        /** @var User $user */
+        $user = $_SESSION['user'];
+        if ($user->isAuthenticated()) {
+            $app->flash('error', "You can't be signed in.");
+            $app->redirectTo('root', array(), 307);
 
-            if (empty($username) || empty($password)) {
-                $app->flashNow('error', 'You need to enter both your username and password.');
-            } else {
-                $auth = new Authenticator($config['ldap']);
-                if (false !== $user = $auth->auth($username, $password)) {
-                    $_SESSION['user'] = $user;
-                    session_regenerate_id();
-                    $app->redirectTo('root');
-                } else {
-                    $app->flashNow('error', 'Login failed.');
+            return;
+        }
+
+        $app->render('forgot.html.twig');
+    }
+)->setName('forgot');
+
+$app->post(
+    '/forgot',
+    function () use ($app, $view, $config) {
+        /** @var User $user */
+        $user = $_SESSION['user'];
+        if ($user->isAuthenticated()) {
+            $app->flash('error', "You can't be signed in.");
+            $app->redirectTo('root', array(), 307);
+
+            return;
+        }
+
+        $username = $app->request()->post('username');
+
+        if (empty($username)) {
+            $app->flashNow('error', 'You need to enter your username.');
+        } else {
+            $conn = new Connection($config['ldap']);
+            $tokenGenerator = new PasswordTokenGenerator($conn);
+            if (false !== $token = $tokenGenerator->getToken($username)) {
+                $emailer = new TokenEmailer($token, $config['email']);
+                if ('development' === $app->getMode()) {
+                    $tok = $token->getTok();
+                    $app->flash('message', $tok);
+                    $app->redirectTo('reset', array('tok' => $tok));
+                }
+                if ($emailer->mail($view->getEnvironment())) {
+                    $app->flash('message', 'Password reset link sent.');
+                    $app->redirectTo('login');
                 }
             }
+            $app->flashNow('error', 'User not found or could not send the password reset link.');
         }
+
+        $app->render('forgot.html.twig');
+    }
+)->setName('process_forgot');
+
+$app->get(
+    '/reset/:tok',
+    function ($tok) use ($app) {
+        $app->view()->set('tok', $tok);
+        $app->render('reset.html.twig');
+    }
+)->setName('reset');
+
+$app->post(
+    '/reset',
+    function () use ($app, $config) {
+        $tok = $app->request()->post('tok', '');
+        $app->view()->set('tok', $tok);
+
+        $username = $app->request()->post('username', '');
+        if (empty($username)) {
+            $app->flashNow('error', 'You must type your username.');
+            $app->render('reset.html.twig');
+
+            return;
+        }
+
+        $new_pass = $app->request()->post('new_password', '');
+        if ($app->request()->post('new_password_confirmation', null) !== $new_pass) {
+            $app->flashNow('error', "Your new password and the confirmation don't match.");
+            $app->render('reset.html.twig');
+
+            return;
+        }
+
+        $policy = new PasswordPolicy($config['password']);
+
+        try {
+            $policy->check($new_pass);
+        } catch (PasswordPolicyException $e) {
+            $app->flashNow('error', $e->getMessage());
+            $app->render('reset.html.twig');
+
+            return;
+        }
+
+        $conn = new Connection($config['ldap']);
+        $user = UserFinder::create($conn)->find($username);
+
+        if (!($user instanceof User)) {
+            $app->flashNow('error', 'Invalid username.');
+            $app->render('reset.html.twig');
+
+            return;
+        }
+
+        $token = new \phpLDAPpass\LDAP\Token($user);
+
+        if (!$token->checkTok(urldecode($tok))) {
+            $app->flash('error', 'Invalid token.');
+            $app->redirectTo('login');
+        }
+
+        $updater = new RootPasswordUpdater($conn);
+
+        if (false !== $updater->update($user, null, $new_pass)) {
+            $app->flash('message', 'Your LDAP password was updated.');
+            $app->redirectTo('login');
+
+            return;
+        }
+
+        $app->flashNow('error', 'There was a problem updating your password.');
+        $app->render('reset.html.twig');
+    }
+)->setName('process_reset');
+
+$app->get(
+    '/login',
+    function () use ($app) {
         $app->render('login.html.twig');
     }
-)->via('GET', 'POST')->setName('login');
+)->setName('login');
+
+$app->post(
+    '/login',
+    function () use ($app, $config) {
+        $username = $app->request()->post('username');
+        $password = $app->request()->post('password');
+
+        if (empty($username) || empty($password)) {
+            $app->flashNow('error', 'You need to enter both your username and password.');
+        } else {
+            $conn = new Connection($config['ldap']);
+            $auth = new Authenticator($conn);
+            if (false !== $user = $auth->auth($username, $password)) {
+                $_SESSION['user'] = $user;
+                session_regenerate_id();
+                $app->redirectTo('root');
+            } else {
+                $app->flashNow('error', 'Login failed.');
+            }
+        }
+
+        $app->render('login.html.twig');
+    }
+)->setName('process_login');
 
 $app->get(
     '/logout',

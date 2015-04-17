@@ -1,0 +1,7 @@
+<p>Hello {{ user.name }},</p>
+
+<p>You, or someone claiming to be you, requested a password reset token for your account at {{ site.short }}.</p>
+<p>Your password reset token is <code>{{ token }}</code>, and you can reset your password <a href="{{ siteUrl(urlFor('reset', {token: enctoken})) }}">here</a>.</p>
+<p>If you didn't request this password reset token, you can ignore this message, but we recommend that you watch your accounts for any suspicious activity.</p>
+
+<p>The team @ {{ site.short }}.</p>

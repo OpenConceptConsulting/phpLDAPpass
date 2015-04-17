@@ -3,7 +3,7 @@
 namespace phpLDAPpass\LDAP;
 
 
-class Authenticator
+class PasswordTokenGenerator
 {
 
     /**
@@ -21,19 +21,17 @@ class Authenticator
 
     /**
      * @param string $username
-     * @param string $password
-     * @return bool|User
+     * @return \phpLDAPpass\LDAP\Token
      */
-    public function auth($username, $password)
+    public function getToken($username)
     {
         $user = UserFinder::create($this->connection)->find($username);
-        $conn = $this->connection->getConnection();
 
-        if ($user instanceof User && @ldap_bind($conn, $user->getDn(), $password)) {
-            $user->setAuthenticated(true);
-            return $user;
+        if ($user instanceof User) {
+            return new Token($user);
         }
 
         return false;
     }
+
 }
