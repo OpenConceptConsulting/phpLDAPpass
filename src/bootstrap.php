@@ -6,8 +6,9 @@ $config = require __DIR__ . '/../config.php';
 
 $app = new \Slim\Slim(
     array(
-        'view' => new \Slim\Views\Twig(),
+        'view'  => new \Slim\Views\Twig(),
         'debug' => false,
+        'mode'  => 'production',
     ) + $config['slim']
 );
 
