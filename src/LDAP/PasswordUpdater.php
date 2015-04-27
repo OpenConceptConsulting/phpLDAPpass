@@ -43,6 +43,10 @@ class PasswordUpdater
     {
         $conn = $this->connection->getConnection();
 
+        // Security check: remove null bytes in password
+        // @see https://net.educause.edu/ir/library/pdf/csd4875.pdf
+        $current_pass = str_replace("\0", '', $current_pass);
+
         if (true !== @ldap_bind($conn, $user->getDn(), $current_pass)) {
             return false;
         }

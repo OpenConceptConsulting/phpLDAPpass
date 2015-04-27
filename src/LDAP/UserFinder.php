@@ -36,6 +36,8 @@ class UserFinder
         $settings = $this->connection->getSettings();
         $conn = $this->connection->getConnection();
 
+        $username = ldap_escape($username, '', LDAP_ESCAPE_FILTER);
+
         $results = @ldap_search(
             $conn,
             $settings['base'],

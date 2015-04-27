@@ -29,7 +29,11 @@ class Authenticator
         $user = UserFinder::create($this->connection)->find($username);
         $conn = $this->connection->getConnection();
 
-        if ($user instanceof User && @ldap_bind($conn, $user->getDn(), $password)) {
+        // Security check: remove null bytes in password
+        // @see https://net.educause.edu/ir/library/pdf/csd4875.pdf
+        $password = str_replace("\0", '', $password);
+
+        if ($user instanceof User && !empty($password) && @ldap_bind($conn, $user->getDn(), $password)) {
             $user->setAuthenticated(true);
             return $user;
         }

@@ -1,6 +1,7 @@
 <?php
 
 require __DIR__ . '/../vendor/autoload.php';
+require __DIR__ . '/LDAP/ldap_escape.php';
 
 $config = require __DIR__ . '/../config.php';
 
