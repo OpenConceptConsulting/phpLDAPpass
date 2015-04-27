@@ -3,7 +3,7 @@
 namespace phpLDAPpass\LDAP;
 
 
-class Token
+class TokenFactory
 {
     /**
      * @var User
@@ -31,7 +31,7 @@ class Token
      * @param string $salt
      * @return string
      */
-    protected function generateTok($expiry, $salt)
+    protected function generateToken($expiry, $salt)
     {
         return sprintf(
             '%d-%s',
@@ -49,7 +49,7 @@ class Token
      *
      * @return string
      */
-    public function getTok()
+    public function getToken()
     {
         $salt = base64_encode(openssl_random_pseudo_bytes(6, $secure));
         while (!$secure) {
@@ -59,26 +59,26 @@ class Token
 
         $expiry = strtotime('+' . $this->duration);
 
-        return $this->generateTok($expiry, $salt);
+        return $this->generateToken($expiry, $salt);
     }
 
     /**
-     * @param string $tok
+     * @param string $token
      * @return bool
      */
-    public function checkTok($tok)
+    public function checkToken($token)
     {
-        if (false === strpos($tok, '-')) {
+        if (false === strpos($token, '-')) {
             throw new \InvalidArgumentException('Invalid token');
         }
 
-        list($expiry, $hash) = explode('-', $tok, 2);
+        list($expiry, $hash) = explode('-', $token, 2);
 
         $expiry = intval($expiry, 10);
         $hash = base64_decode($hash);
         $salt = substr($hash, -4);
 
-        if ($this->generateTok($expiry, $salt) === $tok) {
+        if ($this->generateToken($expiry, $salt) === $token) {
             // Token matches
             if (time() <= $expiry) {
                 // Within the time

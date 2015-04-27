@@ -19,14 +19,14 @@ class Connection
     public function __construct(array $settings = array())
     {
         $this->settings = $settings + array(
-                'server' => 'localhost',
-                'port' => 389,
+                'server'  => 'localhost',
+                'port'    => 389,
                 'version' => 3,
-                'base' => '',
-                'ssl' => false,
-                'filter' => '(&(uid=%s)(objectClass=posixAccount))',
-                'binddn' => null,
-                'bindpw' => null,
+                'base'    => '',
+                'ssl'     => false,
+                'filter'  => '(&(uid=%s)(objectClass=posixAccount))',
+                'binddn'  => null,
+                'bindpw'  => null,
             );
     }
 

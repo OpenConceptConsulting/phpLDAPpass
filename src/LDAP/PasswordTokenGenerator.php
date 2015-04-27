@@ -21,14 +21,14 @@ class PasswordTokenGenerator
 
     /**
      * @param string $username
-     * @return \phpLDAPpass\LDAP\Token
+     * @return \phpLDAPpass\LDAP\TokenFactory
      */
     public function getToken($username)
     {
         $user = UserFinder::create($this->connection)->find($username);
 
         if ($user instanceof User) {
-            return new Token($user);
+            return new TokenFactory($user);
         }
 
         return false;

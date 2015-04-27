@@ -3,27 +3,27 @@
 namespace phpLDAPpass;
 
 
-use phpLDAPpass\LDAP\Token;
+use phpLDAPpass\LDAP\TokenFactory;
 
 class TokenEmailer
 {
 
     /**
-     * @var \phpLDAPpass\LDAP\Token
+     * @var \phpLDAPpass\LDAP\TokenFactory
      */
-    protected $token;
+    protected $tokenFactory;
     /**
      * @var array
      */
     protected $settings;
 
     /**
-     * @param \phpLDAPpass\LDAP\Token $token
+     * @param \phpLDAPpass\LDAP\TokenFactory $tokenFactory
      * @param array $settings
      */
-    function __construct(Token $token, array $settings = array())
+    function __construct(TokenFactory $tokenFactory, array $settings = array())
     {
-        $this->token = $token;
+        $this->tokenFactory = $tokenFactory;
         $this->settings = $settings + array(
                 'subject' => 'LDAP Password Reset',
                 'from' => 'phpLDAPpass@localhost',
@@ -38,16 +38,16 @@ class TokenEmailer
      */
     function mail(\Twig_Environment $twig)
     {
-        $tok = $this->token->getTok();
+        $token = $this->tokenFactory->getToken();
 
         $message = new \Swift_Message($this->settings['subject']);
         $message->setFrom($this->settings['from']);
-        $message->setTo($this->token->getUser()->getMail(), $this->token->getUser()->getDisplayName());
+        $message->setTo($this->tokenFactory->getUser()->getMail(), $this->tokenFactory->getUser()->getDisplayName());
 
         $context = array(
-            'user' => $this->token->getUser(),
-            'token' => $tok,
-            'enctoken' => urlencode($tok),
+            'user' => $this->tokenFactory->getUser(),
+            'token' => $token,
+            'enctoken' => urlencode($token),
         );
 
         $message->setBody($twig->render('email/forgot.html.twig', $context), 'text/html');

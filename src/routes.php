@@ -115,12 +115,12 @@ $app->post(
         } else {
             $conn = new Connection($config['ldap']);
             $tokenGenerator = new PasswordTokenGenerator($conn);
-            if (false !== $token = $tokenGenerator->getToken($username)) {
-                $emailer = new TokenEmailer($token, $config['email']);
+            if (false !== $tokenFactory = $tokenGenerator->getToken($username)) {
+                $emailer = new TokenEmailer($tokenFactory, $config['email']);
                 if ('development' === $app->getMode()) {
-                    $tok = $token->getTok();
-                    $app->flash('message', $tok);
-                    $app->redirectTo('reset', array('tok' => $tok));
+                    $token = $tokenFactory->getToken();
+                    $app->flash('message', $token);
+                    $app->redirectTo('reset', array('token' => $token));
                 }
                 if ($emailer->mail($view->getEnvironment())) {
                     $app->flash('message', 'Password reset link sent.');
@@ -135,9 +135,9 @@ $app->post(
 )->setName('process_forgot');
 
 $app->get(
-    '/reset/:tok',
-    function ($tok) use ($app) {
-        $app->view()->set('tok', $tok);
+    '/reset/:token',
+    function ($token) use ($app) {
+        $app->view()->set('token', $token);
         $app->render('reset.html.twig');
     }
 )->setName('reset');
@@ -145,8 +145,8 @@ $app->get(
 $app->post(
     '/reset',
     function () use ($app, $config) {
-        $tok = $app->request()->post('tok', '');
-        $app->view()->set('tok', $tok);
+        $token = $app->request()->post('token', '');
+        $app->view()->set('token', $token);
 
         $username = $app->request()->post('username', '');
         if (empty($username)) {
@@ -185,9 +185,9 @@ $app->post(
             return;
         }
 
-        $token = new \phpLDAPpass\LDAP\Token($user);
+        $tokenFactory = new \phpLDAPpass\LDAP\TokenFactory($user);
 
-        if (!$token->checkTok(urldecode($tok))) {
+        if (!$tokenFactory->checkToken(urldecode($token))) {
             $app->flash('error', 'Invalid token.');
             $app->redirectTo('login');
         }
